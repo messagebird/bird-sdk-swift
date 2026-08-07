@@ -1,0 +1,44 @@
+# CI for the bird-sdk-swift release mirror. This file is the proof that the
+# exported tree builds and tests with NO Bird monorepo context. It runs against
+# the checked-in mirror content only.
+#
+# Source of truth: clients/swift/realtime/.mirror/ in the Bird monorepo. Do not
+# edit on the mirror; changes are synced from the monorepo.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Two jobs rather than one matrix, because the toolchain arrives differently on
+# each platform and the package's Foundation surface differs between them:
+# URLRequest/URLSession live in FoundationNetworking on Linux, and corelibs
+# declares URLSessionWebSocketDelegate with no optional members. A macOS-only
+# run would not catch either.
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    # GitHub's Linux images ship no Swift, so the toolchain comes from the
+    # official swiftlang image rather than a third-party setup action. The tag is
+    # the version pin; the monorepo gates on the same one.
+    container: swift:6.1-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - run: swift build
+      - run: swift test
+
+  macos:
+    # Swift comes with the preinstalled Xcode here, so there is nothing to set up.
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - run: swift build
+      - run: swift test

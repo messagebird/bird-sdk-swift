@@ -1,0 +1,58 @@
+# Cuts a GitHub Release when a vX.Y.Z tag is pushed to this mirror, then smoke-
+# tests that the tag is resolvable as a SwiftPM dependency. SwiftPM has no
+# registry and no upload: it resolves a package straight from this repository's
+# git tags, so the tag itself is the published artifact (like the Go module proxy
+# and Packagist) and there is nothing to push here: no token, no OIDC. This
+# workflow makes the release visible and proves the tag resolves.
+#
+# Source of truth: clients/swift/realtime/.mirror/ in the Bird monorepo. Do NOT
+# edit on the mirror; changes are synced from the monorepo by
+# scripts/dev/sdk-release.sh.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # create the GitHub Release
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # The release runs first and on its own: the tag IS the published artifact, so
+  # once it is pushed the notes must land regardless of what the smoke test below
+  # does. Keeping them separate also means a resolution flake reads as a failed
+  # smoke test rather than a failed release.
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Skip if the release already exists, so a re-run doesn't 422.
+        # --notes-from-tag reuses the annotated tag's message (this version's
+        # CHANGELOG section, set by scripts/dev/sdk-release.sh).
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --notes-from-tag --verify-tag
+
+  smoke:
+    name: Smoke
+    needs: release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # The smoke test resolves and builds a consumer package, so it needs a
+    # toolchain; GitHub's Linux images ship none.
+    container: swift:6.1-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/smoke.sh "${GITHUB_REF_NAME#v}"
