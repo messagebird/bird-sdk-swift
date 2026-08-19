@@ -208,6 +208,23 @@ func waitFor(
 }
 
 @Suite(.serialized) struct ClientTests {
+    @Test func refusesEncryptedChannelSubscriptions() async {
+        let (client, transport) = makeClient()
+        await waitFor("transport never connected") { await transport().connected }
+
+        let channel = client.subscribe("private-encrypted-orders")
+        let failures = Box<Any?>()
+        channel.bind(BirdProtocol.Event.subscriptionError) { failures.push($0) }
+        let clientErrors = Box<String?>()
+        client.onError { clientErrors.push($0.message) }
+
+        handshake(await transport())
+        await waitFor("subscription never failed") { !failures.all.isEmpty }
+        #expect(await transport().sentEvent("bird:subscribe") == nil)
+        await waitFor("client error never emitted") { !clientErrors.all.isEmpty }
+        #expect(clientErrors.all.first??.contains("private-encrypted-") == true)
+    }
+
     @Test func handshakeThenSubscribeFlow() async {
         let (client, transport) = makeClient()
         await waitFor("transport never connected") { await transport().connected }

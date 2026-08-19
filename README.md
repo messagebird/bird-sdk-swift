@@ -1,6 +1,6 @@
 # BirdRealtime
 
-The Bird Realtime client for Swift. Subscribe to channels and receive events in real time over a WebSocket.
+The official Bird Realtime client for Swift: subscribe to channels and receive events in real time over a WebSocket.
 
 > Looking for the server side (sending messages, managing resources, verifying webhooks, publishing Realtime events)? Those live in the Bird API; see the [API reference](https://bird.com/docs/api).
 

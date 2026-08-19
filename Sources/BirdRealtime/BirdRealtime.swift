@@ -92,7 +92,7 @@ public final class MemberEvents: @unchecked Sendable {
 // Queue-confined: `queue` serializes all client + channel state, so the
 // stored observers and channel table are never touched concurrently.
 public final class BirdRealtime: @unchecked Sendable {
-    public static let version = "0.1.0"
+    public static let version = "0.1.1"
 
     public let appKey: String
 
@@ -387,6 +387,20 @@ public final class BirdRealtime: @unchecked Sendable {
     }
 
     private func sendSubscribeLocked(_ channel: Channel) {
+        // End-to-end encrypted channels are not supported by this client yet.
+        // Letting the name fall through to PrivateChannel would subscribe
+        // successfully and hand the caller undecryptable ciphertext, so the
+        // subscription fails loudly instead — here rather than in subscribe(),
+        // so a reconnect's resubscribe sweep hits the same refusal.
+        if channel.name.hasPrefix("private-encrypted-") {
+            let message =
+                "End-to-end encrypted channels (private-encrypted-) are not supported by this client yet"
+            channel.handleSubscriptionError(["error": message])
+            for (_, observer) in errorObservers {
+                observer(RealtimeError(code: nil, message: message))
+            }
+            return
+        }
         guard let connectionId = connection.connectionId else { return }
         channel.startSubscribe(connectionId: connectionId, queue: queue) {
             // Late continuations check this: same connection, not replaced.
